@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint, types, tests (Python ${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.14']
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+      # --locked fails when uv.lock does not match pyproject.toml. That is
+      # exactly what it is for.
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - name: Check the hook configuration
+        run: uv run lefthook validate
+      - run: uv run mypy
+      # The coverage floor (fail_under) lives in pyproject.toml.
+      - run: uv run pytest --cov
+      - name: Check the distribution content
+        run: |
+          set -euo pipefail
+          uv build --out-dir "$RUNNER_TEMP/dist"
+          unzip -l "$RUNNER_TEMP"/dist/*.whl | grep -E 'pysnapdog/(py.typed|client.py)'
+          tar -tzf "$RUNNER_TEMP"/dist/*.tar.gz | sort
+
+  security:
+    name: Secrets and advisories
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          # If required for organisation use: a narrowly scoped CI tooling
+          # secret, never one from a publish environment.
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: '3.14'
+      - run: uv sync --locked
+      - run: uv audit --preview-features audit-command
+
+  commit-hygiene:
+    name: Commit hygiene
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Check title, body and every commit
+        # Title and body reach the script exclusively through env, never by
+        # interpolation into the script text: otherwise the pull request title
+        # would be a shell injection vector.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          status=0
+          cc='^((feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?!?: .+|Revert ".+")'
+          # grep works line by line, hence .* rather than [^\n]*: in ERE
+          # [^\n] would be the class "neither a backslash nor an n" and would
+          # exclude names containing an 'n'. In the RE2 rule of the ruleset
+          # [^\n] is the correct one. Anchored at the start of the line: by
+          # convention a trailer stands on a line of its own. Without the anchor
+          # the rule also fires when a pull request body merely mentions the
+          # forbidden trailer, for instance to describe a doctor finding, and it
+          # then rejects a valid input.
+          ban='^[[:space:]]*co-authored-by:.*(claude|anthropic)|^[[:space:]]*generated with.*claude code'
+
+          # On a squash merge the pull request title becomes the subject line
+          # on main and thereby determines the next version.
+          if ! printf '%s' "$PR_TITLE" | grep -Eq "$cc"; then
+            echo "::error::pull request title does not follow Conventional Commits: $PR_TITLE"
+            status=1
+          fi
+
+          # With squash_merge_commit_message=PR_BODY the body lands in the commit.
+          if printf '%s' "$PR_BODY" | grep -Eiq "$ban"; then
+            echo "::error::the pull request body contains an AI attribution trailer."
+            status=1
+          fi
+
+          for sha in $(git rev-list "${BASE_SHA}..${HEAD_SHA}"); do
+            if git log -1 --format=%B "$sha" | grep -Eiq "$ban"; then
+              echo "::error::commit $sha contains an AI attribution trailer."
+              status=1
+            fi
+            email=$(git log -1 --format='%ae%n%ce' "$sha")
+            if printf '%s' "$email" | grep -Fq 'noreply@anthropic.com'; then
+              echo "::error::commit $sha has an Anthropic address as author or committer."
+              status=1
+            fi
+          done
+
+          if [ "$status" -ne 0 ]; then
+            echo "::notice::switch this off for good in ~/.claude/settings.json: {\"attribution\":{\"commit\":\"\",\"pr\":\"\"}}"
+            exit 1
+          fi
+
+  ci-success:
+    name: CI Success
+    if: always()
+    needs: [quality, security, commit-hygiene]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Every preceding job must have succeeded or been skipped
+        run: |
+          set -euo pipefail
+          printf '%s\n' '${{ toJSON(needs) }}' |
+            jq -e 'all(.[]; .result == "success" or .result == "skipped")'

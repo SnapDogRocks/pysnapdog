@@ -1,0 +1,87 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pysnapdog"
+version = "0.0.0"  # managed by release-please
+description = "Async Python client for the SnapDog multi-room audio server (REST and WebSocket)"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Fabian Schmieder" }]
+requires-python = ">=3.14"
+keywords = ["snapdog", "snapcast", "multiroom", "audio", "home-assistant"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Framework :: AsyncIO",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Home Automation",
+  "Topic :: Multimedia :: Sound/Audio",
+  "Typing :: Typed",
+]
+dependencies = [
+    "aiohttp>=3.14.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/SnapDogRocks/pysnapdog"
+Repository = "https://github.com/SnapDogRocks/pysnapdog"
+Issues = "https://github.com/SnapDogRocks/pysnapdog/issues"
+Changelog = "https://github.com/SnapDogRocks/pysnapdog/blob/main/CHANGELOG.md"
+Server = "https://github.com/SnapDogRocks/snapdog"
+
+[dependency-groups]
+dev = [
+    "lefthook>=2.2.2",
+    "mypy>=2.4.1",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.17.3",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pysnapdog"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W", "F", "I", "B", "UP", "SIM", "C4", "PT", "RUF", "ASYNC", "S", "TRY", "PL", "N", "A",
+  "ARG", "PERF", "FBT", "T20", "RET", "TID", "PTH", "ANN", "D",
+]
+ignore = [
+  "D203", "D213",   # pick one of each conflicting pair
+  "PLR2004",        # magic values in tests and protocol constants read better inline
+  "TRY003",         # exception messages carry the failing URL, a class per message is noise
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "D", "ANN", "PLR0913", "FBT"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+strict = true
+python_version = "3.14"
+files = ["src", "tests"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config -ra"
+
+[tool.coverage.run]
+source = ["pysnapdog"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true

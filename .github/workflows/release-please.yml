@@ -1,0 +1,43 @@
+# The only automatic route by which a production tag comes about.
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-24.04
+    # Per the non-negotiable rule the app credentials live exclusively in this
+    # environment. Without the declaration they are invisible to the job.
+    environment: release
+    steps:
+      # The release pull request MUST be created with an app token. GitHub
+      # suppresses workflow triggers from GITHUB_TOKEN pushes as recursion
+      # protection; CI would then never run on the release pull request and the
+      # required checks would stay pending. An app token is a genuine actor.
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        id: app-token
+        with:
+          client-id: ${{ vars.RELEASE_PLEASE_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
+
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: rp
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      # No release build is started yet: there is no release.yml. It comes with
+      # the PyPI trusted publisher, and with it the
+      # step that dispatches it for the new draft release.
