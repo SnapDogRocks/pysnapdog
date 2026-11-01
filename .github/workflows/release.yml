@@ -1,0 +1,92 @@
+# Publishes a release to PyPI. Started by release-please.yml for the draft release it created,
+# or by hand for a tag that exists. The first upload uses the PYPI_TOKEN of the release
+# environment. Once the project exists on PyPI, a trusted publisher replaces the token
+# (id-token: write, no password) and the secret is deleted.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, for example v0.1.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    environment: release
+    steps:
+      - name: Preflight
+        env:
+          TAG: ${{ inputs.tag }}
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "bad tag: $TAG"; exit 1; }
+          [ -n "$PYPI_TOKEN" ] || { echo "PYPI_TOKEN is empty"; exit 1; }
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: '3.14'
+
+      - name: Check that the tag and the package agree
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          version=$(uv run --no-project python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          [ "v$version" = "$TAG" ] || { echo "pyproject says $version, the tag is $TAG"; exit 1; }
+
+      - name: Test and build
+        run: |
+          set -euo pipefail
+          uv sync --locked
+          uv run pytest --cov
+          uv build --out-dir dist
+
+      - name: Upload to PyPI
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: uv publish dist/*
+
+      - name: Verify that PyPI serves exactly what was built
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          for file in dist/*; do
+            name=$(basename "$file")
+            want=$(sha256sum "$file" | cut -d' ' -f1)
+            for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+              got=$(curl -sSf "https://pypi.org/pypi/pysnapdog/${version}/json" \
+                | jq -r --arg n "$name" '.urls[] | select(.filename==$n) | .digests.sha256' || true)
+              [ "$got" = "$want" ] && break
+              sleep 10
+            done
+            [ "$got" = "$want" ] || { echo "$name: PyPI has '$got', built $want"; exit 1; }
+            echo "$name verified"
+          done
+
+      - name: Publish the GitHub release
+        env:
+          TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+          gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
