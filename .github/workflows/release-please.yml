@@ -38,6 +38,10 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      # No release build is started yet: there is no release.yml. It comes with
-      # the PyPI trusted publisher, and with it the
-      # step that dispatches it for the new draft release.
+      # Hand the draft release to the publish workflow. The tag exists (force-tag-creation).
+      - name: Start the release workflow
+        if: steps.rp.outputs.release_created == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ steps.rp.outputs.tag_name }}
+        run: gh workflow run release.yml --repo "$GITHUB_REPOSITORY" -f tag="$TAG"
