@@ -1,10 +1,8 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/SnapDogRocks/snapdog/main/assets/snapdog-logo.svg" alt="SnapDog" width="160">
+<img src="https://raw.githubusercontent.com/SnapDogRocks/snapdog/main/assets/snapdog-logo.svg" alt="SnapDog" width="200">
 
-# pysnapdog
-
-**Async Python client for the SnapDog multi-room audio server**
+**pysnapdog: async Python client for the SnapDog multi-room audio server**
 
 Typed. Fully asynchronous. Built for Home Assistant, usable everywhere.
 
