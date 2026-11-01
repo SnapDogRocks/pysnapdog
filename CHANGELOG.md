@@ -1,0 +1,15 @@
+# Changelog
+
+## 0.1.0 (2026-11-01)
+
+
+### Features
+
+* bootstrap the repository ([4105e40](https://github.com/SnapDogRocks/pysnapdog/commit/4105e4044bdc9d445b11a2de33d6f3b077e182d0))
+* cover the REST API and the WebSocket events of the server ([72cf902](https://github.com/SnapDogRocks/pysnapdog/commit/72cf90263d862c2d5e58a8e11137cbd56d5bd492))
+
+
+### Documentation
+
+* align the README header with the server repository ([c0c5385](https://github.com/SnapDogRocks/pysnapdog/commit/c0c538564124faf9e54837a65fbae0d968998f12))
+* drop the not-yet-released notes from the README ([#4](https://github.com/SnapDogRocks/pysnapdog/issues/4)) ([2a045cf](https://github.com/SnapDogRocks/pysnapdog/commit/2a045cf860fc0beba9e58d597c98462d5e677db3))
