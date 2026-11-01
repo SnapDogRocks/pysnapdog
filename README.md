@@ -22,8 +22,8 @@ dependency of its own: you hand it an `aiohttp` session and it hands you typed o
 
 > [!NOTE]
 > **Early development.** The library is at version 0.x. It covers every REST operation and every
-> WebSocket event of the server, but has not been released yet and may still change. The plan and
-> the checklist that defines "complete" are in
+> WebSocket event of the server and may still change. The plan and the checklist that defines
+> "complete" are in
 > [RFC HAI-0010](https://github.com/SnapDogRocks/snapdog/blob/main/docs/rfcs/0010-home-assistant-integration-build.md).
 > The API may change between 0.x releases.
 
@@ -45,10 +45,6 @@ dependency of its own: you hand it an `aiohttp` session and it hands you typed o
 ```bash
 pip install pysnapdog
 ```
-
-> [!IMPORTANT]
-> Not on PyPI yet. Until the first release, install from a checkout:
-> `uv pip install -e .` or `pip install -e .`.
 
 Requires Python 3.14 or newer, the version Home Assistant 2026.10 runs on.
 
