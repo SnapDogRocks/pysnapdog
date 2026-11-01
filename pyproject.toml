@@ -35,12 +35,14 @@ Server = "https://github.com/SnapDogRocks/snapdog"
 
 [dependency-groups]
 dev = [
+    "jsonschema>=4.26.0",
     "lefthook>=2.2.2",
     "mypy>=2.4.1",
     "pytest>=9.2.0",
     "pytest-asyncio>=1.4.1",
     "pytest-cov>=7.1.0",
     "ruff>=0.17.3",
+    "types-jsonschema>=4.26.0.20261006",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -63,7 +65,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "D", "ANN", "PLR0913", "FBT"]
+"tests/**" = ["S101", "D", "ANN", "PLR0913", "FBT", "PERF401", "ASYNC109"]
+"scripts/**" = ["T201", "D"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -75,6 +78,7 @@ files = ["src", "tests"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 addopts = "--strict-markers --strict-config -ra"
 
