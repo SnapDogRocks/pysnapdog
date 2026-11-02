@@ -8,14 +8,7 @@
       "bump-minor-pre-major": true,
       "draft": true,
       "force-tag-creation": true,
-      "include-component-in-tag": false,
-      "extra-files": [
-        {
-          "type": "toml",
-          "path": "uv.lock",
-          "jsonpath": "$.package[?(@.name=='pysnapdog')].version"
-        }
-      ]
+      "include-component-in-tag": false
     }
   }
 }
