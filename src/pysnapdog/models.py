@@ -34,6 +34,29 @@ def _optional(data: JSON, key: str, kind: type, what: str) -> Any:  # noqa: ANN4
     return _require(data, key, kind, what)
 
 
+def _playlist_index(data: JSON, key: str, legacy: str, what: str) -> int | None:
+    """The unified playlist index of a payload, from ``key`` or else from ``legacy``.
+
+    Servers that know the playlist identity send ``key`` (``index``, ``playlist_index``) and
+    ``playlist_id``. A payload without ``key`` comes from an older server, whose only name for
+    the index is the deprecated ``legacy`` field (``id``, ``playlist``). This is the one place
+    that reads it, so a client keeps working against older servers. A payload that has neither
+    yields ``None``.
+    """
+    value: int | None = _optional(data, key, int, what)
+    if value is None:
+        value = _optional(data, legacy, int, what)
+    return value
+
+
+def _required_index(data: JSON, what: str) -> int:
+    """``index`` of a playlist payload (see ``_playlist_index``), an error when there is none."""
+    value = _playlist_index(data, "index", "id", what)
+    if value is None:
+        raise SnapDogResponseError(f"{what}: field 'index' is missing or not int")
+    return value
+
+
 def _number(data: JSON, key: str, what: str) -> float:
     """A JSON number, which the server may write with or without a fraction."""
     return float(_require(data, key, (int, float), what))
@@ -231,6 +254,7 @@ class TrackMetadata:
     sample_rate: int | None
     content_type: str | None
     playlist_index: int | None
+    playlist_id: str | None
     playlist_name: str | None
     playlist_total: int | None
     playlist_track_index: int | None
@@ -238,7 +262,11 @@ class TrackMetadata:
 
     @classmethod
     def from_dict(cls, data: JSON) -> Self:
-        """Build the model from a decoded JSON object."""
+        """Build the model from a decoded JSON object.
+
+        ``playlist_id`` is ``None`` when the server is too old to send it. Remember and compare
+        playlists by ``playlist_id``, because ``playlist_index`` moves when the list changes.
+        """
         what = "ZoneTrackMetadata"
         return cls(
             title=_require(data, "title", str, what),
@@ -262,6 +290,7 @@ class TrackMetadata:
             sample_rate=_optional(data, "sample_rate", int, what),
             content_type=_optional(data, "content_type", str, what),
             playlist_index=_optional(data, "playlist_index", int, what),
+            playlist_id=_optional(data, "playlist_id", str, what),
             playlist_name=_optional(data, "playlist_name", str, what),
             playlist_total=_optional(data, "playlist_total", int, what),
             playlist_track_index=_optional(data, "playlist_track_index", int, what),
@@ -274,6 +303,7 @@ class ZonePlaylist:
     """``ZonePlaylistInfo``: the playlist a zone is on, from ``GET /zones/{n}/playlist/info``."""
 
     index: int | None
+    playlist_id: str | None
     name: str | None
     total: int | None
     track_index: int | None
@@ -281,10 +311,14 @@ class ZonePlaylist:
 
     @classmethod
     def from_dict(cls, data: JSON) -> Self:
-        """Build the model from a decoded JSON object."""
+        """Build the model from a decoded JSON object.
+
+        ``playlist_id`` is ``None`` when no playlist is active or the server is too old to send it.
+        """
         what = "ZonePlaylistInfo"
         return cls(
             index=_optional(data, "index", int, what),
+            playlist_id=_optional(data, "playlist_id", str, what),
             name=_optional(data, "name", str, what),
             total=_optional(data, "total", int, what),
             track_index=_optional(data, "track_index", int, what),
@@ -294,9 +328,18 @@ class ZonePlaylist:
 
 @dataclass(frozen=True, slots=True)
 class Playlist:
-    """``PlaylistInfo``: one entry of ``GET /api/v1/media/playlists``."""
+    """``PlaylistInfo``: one entry of ``GET /api/v1/media/playlists``.
 
-    id: int
+    ``playlist_id`` (``snapdog:radio`` or ``subsonic:<id>``) is the stable reference: remember and
+    compare playlists by it. ``index`` is the unified index, which moves when playlists or radios
+    are added or removed, so use it only to address an index endpoint right away.
+
+    Against an older server that sends no ``index`` the model falls back to the deprecated ``id``
+    field for ``index``, and ``playlist_id`` is ``None``.
+    """
+
+    index: int
+    playlist_id: str | None
     name: str
     song_count: int
     duration: int
@@ -307,19 +350,29 @@ class Playlist:
         """Build the model from a decoded JSON object."""
         what = "PlaylistInfo"
         return cls(
-            id=_require(data, "id", int, what),
+            index=_required_index(data, what),
+            playlist_id=_optional(data, "playlist_id", str, what),
             name=_require(data, "name", str, what),
             song_count=_require(data, "song_count", int, what),
             duration=_require(data, "duration", int, what),
             cover_art=_optional(data, "cover_art", str, what),
         )
 
+    @property
+    def id(self) -> int:
+        """The unified index, under the name of the deprecated ``id`` field. Use ``index``."""
+        return self.index
+
 
 @dataclass(frozen=True, slots=True)
 class PlaylistDetails:
-    """``PlaylistDetails``: ``GET /api/v1/media/playlists/{n}``."""
+    """``PlaylistDetails``: ``GET /api/v1/media/playlists/{n}`` and ``.../by-id/{playlist_id}``.
 
-    id: int
+    The same identity rules and the same fallback for older servers as ``Playlist``.
+    """
+
+    index: int
+    playlist_id: str | None
     name: str
     tracks: int
 
@@ -328,10 +381,16 @@ class PlaylistDetails:
         """Build the model from a decoded JSON object."""
         what = "PlaylistDetails"
         return cls(
-            id=_require(data, "id", int, what),
+            index=_required_index(data, what),
+            playlist_id=_optional(data, "playlist_id", str, what),
             name=_require(data, "name", str, what),
             tracks=_require(data, "tracks", int, what),
         )
+
+    @property
+    def id(self) -> int:
+        """The unified index, under the name of the deprecated ``id`` field. Use ``index``."""
+        return self.index
 
 
 @dataclass(frozen=True, slots=True)
