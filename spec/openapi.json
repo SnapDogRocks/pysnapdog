@@ -1570,27 +1570,21 @@
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Maximum number of tracks. Without `limit` and `offset` every track is returned and no\n`X-Total-Count` header is sent.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "minimum": 0
             }
           },
           {
             "name": "offset",
-            "in": "path",
+            "in": "query",
             "description": "Number of tracks to skip (default 0).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "minimum": 0
             }
           }
@@ -1774,27 +1768,21 @@
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "description": "Maximum number of tracks. Without `limit` and `offset` every track is returned and no\n`X-Total-Count` header is sent.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "minimum": 0
             }
           },
           {
             "name": "offset",
-            "in": "path",
+            "in": "query",
             "description": "Number of tracks to skip (default 0).",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": "integer",
               "minimum": 0
             }
           }
@@ -3715,7 +3703,7 @@
         ],
         "summary": "Get zone playlist reference",
         "description": "Returns the `playlist_id` of the currently active playlist in the specified zone, or an empty\nstring when no playlist is active. The path without `by-id` returns the index.",
-        "operationId": "get_playlist_by_id",
+        "operationId": "get_zone_playlist_by_id",
         "parameters": [
           {
             "name": "zone_index",
@@ -3763,7 +3751,7 @@
         ],
         "summary": "Set zone playlist by `playlist_id`",
         "description": "Selects the playlist with the given `playlist_id` (a JSON string such as `\"subsonic:42\"`).\nIf the zone is already playing, playback switches to it, otherwise it is loaded. The path\nwithout `by-id` takes the unified index. An unknown `playlist_id` is a 404.",
-        "operationId": "set_playlist_by_id",
+        "operationId": "set_zone_playlist_by_id",
         "parameters": [
           {
             "name": "zone_index",
