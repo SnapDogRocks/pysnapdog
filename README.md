@@ -82,12 +82,17 @@ state arrives as an event. Calls on clients return the new value.
 
 ```python
 await client.set_zone_volume(1, 35)  # absolute, or "+5" / "-3" for relative
-await client.play_playlist(1, playlist=2)
+await client.play_playlist_id(1, "subsonic:42")  # remember playlists by playlist_id, not by index
 await client.set_zone_repeat(1, RepeatMode.PLAYLIST)
 await client.apply_zone_eq_preset(1, "rock")
 await client.set_client_zone(3, 2)  # move client 3 into zone 2
 cover = await client.zone_cover(1)  # Image(content=b"...", content_type="image/jpeg")
 ```
+
+A playlist has a stable `playlist_id` (`snapdog:radio` or `subsonic:<id>`) and a unified `index` that moves
+when playlists or radios are added or removed. Store and compare the `playlist_id`, and reload
+`client.playlists()` on the `PlaylistsChanged` event and after a reconnect. Against a server that is too old
+to send `playlist_id`, it is `None` and the models take `index` from the deprecated `id` field.
 
 ### Live updates
 
