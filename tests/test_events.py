@@ -12,6 +12,7 @@ from pysnapdog import (
     ClientStateChanged,
     EqConfig,
     PlaybackError,
+    PlaylistsChanged,
     RepeatMode,
     SnapDogResponseError,
     UnknownEvent,
@@ -33,6 +34,7 @@ CLASSES = {
     "zone_eq_changed": ZoneEqChanged,
     "zone_presence_changed": ZonePresenceChanged,
     "playback_error": PlaybackError,
+    "playlists_changed": PlaylistsChanged,
 }
 MESSAGES: dict[str, Any] = ASYNCAPI["components"]["messages"]
 
@@ -71,6 +73,43 @@ def test_a_zone_changed_event_carries_its_values() -> None:
     event = parse_event({**payload("zone_changed"), "repeat": "track", "volume": 33, "title": "T"})
     assert isinstance(event, ZoneChanged)
     assert (event.repeat, event.volume, event.title) == (RepeatMode.TRACK, 33, "T")
+
+
+def test_zone_changed_parses_the_playlist_identity_without_the_deprecated_playlist() -> None:
+    data = {k: v for k, v in payload("zone_changed").items() if k != "playlist"}
+    event = parse_event({**data, "playlist_index": 2, "playlist_id": "subsonic:42"})
+    assert isinstance(event, ZoneChanged)
+    assert (event.playlist_index, event.playlist_id) == (2, "subsonic:42")
+
+
+def test_zone_changed_accepts_a_null_playlist_identity() -> None:
+    data = {k: v for k, v in payload("zone_changed").items() if k != "playlist"}
+    event = parse_event({**data, "playlist_index": None, "playlist_id": None})
+    assert isinstance(event, ZoneChanged)
+    assert (event.playlist_index, event.playlist_id) == (None, None)
+
+
+def test_zone_changed_of_an_older_server_falls_back_to_playlist() -> None:
+    data = {
+        k: v
+        for k, v in payload("zone_changed").items()
+        if k not in ("playlist_index", "playlist_id")
+    }
+    event = parse_event({**data, "playlist": 3})
+    assert isinstance(event, ZoneChanged)
+    assert (event.playlist_index, event.playlist_id) == (3, None)
+
+
+def test_playlist_index_wins_over_the_deprecated_playlist() -> None:
+    event = parse_event({**payload("zone_changed"), "playlist": 9, "playlist_index": 2})
+    assert isinstance(event, ZoneChanged)
+    assert event.playlist_index == 2
+    assert event.playlist == 2
+
+
+def test_playlists_changed_carries_the_total() -> None:
+    event = parse_event({"type": "playlists_changed", "total": 5})
+    assert event == PlaylistsChanged(total=5)
 
 
 def test_the_eq_config_is_flattened_into_the_event() -> None:
