@@ -45,7 +45,8 @@ jobs:
         if: steps.rp.outputs.prs_created == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ fromJSON(steps.rp.outputs.pr).headBranchName }}
+          # The branch Release Please keeps for this package, a fixed name and not an output.
+          ref: release-please--branches--main--components--pysnapdog
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Set up uv
