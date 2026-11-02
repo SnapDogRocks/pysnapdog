@@ -122,8 +122,74 @@ async def test_playing_a_playlist_without_a_track_omits_the_track(
     session: aiohttp.ClientSession, fake: Fake
 ) -> None:
     await client(session, fake).play_playlist(1, 2)
-    assert fake.last.body == {"id": 2}
+    assert fake.last.body == {"index": 2}
     assert not fake.violations
+
+
+async def test_playing_a_playlist_sends_index_and_never_id(
+    session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    await client(session, fake).play_playlist(1, 2, 5)
+    assert fake.last.body == {"index": 2, "track": 5}
+    assert "id" not in fake.last.body
+    assert not fake.violations
+
+
+async def test_playing_a_playlist_by_id_without_a_track_omits_the_track(
+    session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    await client(session, fake).play_playlist_id(1, "snapdog:radio")
+    assert fake.last.body == {"playlist_id": "snapdog:radio"}
+    assert not fake.violations
+
+
+async def test_the_playlist_id_of_a_zone_is_none_when_no_playlist_is_active(
+    session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    key = ("GET", "/api/v1/zones/{zone_index}/playlist/by-id")
+    fake.overrides[key] = web.json_response("")
+    assert await client(session, fake).zone_playlist_id(1) is None
+    fake.overrides[key] = web.json_response("subsonic:42")
+    assert await client(session, fake).zone_playlist_id(1) == "subsonic:42"
+
+
+@pytest.mark.parametrize(
+    ("limit", "offset", "query"),
+    [
+        (None, None, ""),
+        (5, None, "?limit=5"),
+        (None, 10, "?offset=10"),
+        (5, 10, "?limit=5&offset=10"),
+    ],
+)
+async def test_track_lists_may_be_cut(
+    session: aiohttp.ClientSession, fake: Fake, limit: int | None, offset: int | None, query: str
+) -> None:
+    c = client(session, fake)
+    await c.playlist_tracks(1, limit=limit, offset=offset)
+    assert fake.last.path == f"/api/v1/media/playlists/1/tracks{query}"
+    await c.playlist_tracks_by_id("subsonic:7", limit=limit, offset=offset)
+    assert fake.last.path == f"/api/v1/media/playlists/by-id/subsonic:7/tracks{query}"
+
+
+async def test_a_negative_limit_or_offset_is_refused_before_sending(
+    session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    with pytest.raises(ValueError, match="negative"):
+        await client(session, fake).playlist_tracks(1, limit=-1)
+    with pytest.raises(ValueError, match="negative"):
+        await client(session, fake).playlist_tracks_by_id("snapdog:radio", offset=-1)
+    assert not fake.calls
+
+
+async def test_an_unknown_playlist_id_is_not_found(
+    session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    fake.overrides[("GET", "/api/v1/media/playlists/by-id/{playlist_id}")] = web.json_response(
+        {"error": "not_found", "message": "no such playlist"}, status=404
+    )
+    with pytest.raises(SnapDogNotFoundError, match="no such playlist"):
+        await client(session, fake).playlist_by_id("subsonic:nope")
 
 
 # ── Errors ──────────────────────────────────────────────────────────────────

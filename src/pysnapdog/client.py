@@ -199,6 +199,13 @@ class SnapDogClient:
         """Read ``GET /zones/{index}/playlist/info``."""
         return ZonePlaylist.from_dict(await self._object("GET", f"/zones/{index}/playlist/info"))
 
+    async def zone_playlist_id(self, index: int) -> str | None:
+        """Read ``GET /zones/{index}/playlist/by-id``: the ``playlist_id`` the zone is on.
+
+        ``None`` when no playlist is active.
+        """
+        return await self._string("GET", f"/zones/{index}/playlist/by-id") or None
+
     async def zone_cover(self, index: int) -> Image:
         """Download ``GET /zones/{index}/cover``. ``SnapDogNotFoundError`` when there is none."""
         return await self._download(f"/zones/{index}/cover")
@@ -281,6 +288,13 @@ class SnapDogClient:
         """Select a playlist by its unified index (``0`` is the radio list)."""
         await self._command("PUT", f"/zones/{index}/playlist", json=playlist)
 
+    async def set_zone_playlist_id(self, index: int, playlist_id: str) -> None:
+        """Select a playlist by its ``playlist_id`` (``PUT /zones/{index}/playlist/by-id``).
+
+        An unknown ``playlist_id`` raises ``SnapDogNotFoundError``.
+        """
+        await self._command("PUT", f"/zones/{index}/playlist/by-id", json=playlist_id)
+
     async def next_playlist(self, index: int) -> None:
         """Select the next playlist."""
         await self._command("POST", f"/zones/{index}/next/playlist")
@@ -294,11 +308,27 @@ class SnapDogClient:
         await self._command("POST", f"/zones/{index}/play/track", json=track)
 
     async def play_playlist(self, index: int, playlist: int, track: int | None = None) -> None:
-        """Switch to a playlist and play it, from ``track`` when given."""
-        body: JSON = {"id": playlist}
+        """Switch to the playlist with the unified index ``playlist``, from ``track`` when given.
+
+        The index moves when playlists change, so prefer ``play_playlist_id``. The request carries
+        ``index``, never the deprecated ``id``.
+        """
+        body: JSON = {"index": playlist}
         if track is not None:
             body["track"] = track
         await self._command("POST", f"/zones/{index}/play/playlist", json=body)
+
+    async def play_playlist_id(
+        self, index: int, playlist_id: str, track: int | None = None
+    ) -> None:
+        """Switch to the playlist with this ``playlist_id`` and play it, from ``track`` when given.
+
+        An unknown ``playlist_id`` raises ``SnapDogNotFoundError``.
+        """
+        body: JSON = {"playlist_id": playlist_id}
+        if track is not None:
+            body["track"] = track
+        await self._command("POST", f"/zones/{index}/play/playlist/by-id", json=body)
 
     async def play_playlist_track(self, index: int, playlist: int, track: int) -> None:
         """Play one track of one playlist."""
@@ -425,10 +455,31 @@ class SnapDogClient:
         """Read ``GET /media/playlists/{index}``."""
         return PlaylistDetails.from_dict(await self._object("GET", f"/media/playlists/{index}"))
 
-    async def playlist_tracks(self, index: int) -> list[MediaTrack]:
-        """Read ``GET /media/playlists/{index}/tracks``."""
-        items = await self._objects("GET", f"/media/playlists/{index}/tracks")
-        return [MediaTrack.from_dict(item) for item in items]
+    async def playlist_by_id(self, playlist_id: str) -> PlaylistDetails:
+        """Read ``GET /media/playlists/by-id/{playlist_id}``.
+
+        An unknown ``playlist_id`` raises ``SnapDogNotFoundError``.
+        """
+        path = f"/media/playlists/by-id/{_segment(playlist_id)}"
+        return PlaylistDetails.from_dict(await self._object("GET", path))
+
+    async def playlist_tracks(
+        self, index: int, *, limit: int | None = None, offset: int | None = None
+    ) -> list[MediaTrack]:
+        """Read ``GET /media/playlists/{index}/tracks``.
+
+        With ``limit`` and/or ``offset`` the server cuts the same array. The total count it
+        reports in ``X-Total-Count`` is not returned.
+        """
+        path = f"/media/playlists/{index}/tracks{_page(limit, offset)}"
+        return [MediaTrack.from_dict(item) for item in await self._objects("GET", path)]
+
+    async def playlist_tracks_by_id(
+        self, playlist_id: str, *, limit: int | None = None, offset: int | None = None
+    ) -> list[MediaTrack]:
+        """Read ``.../by-id/{playlist_id}/tracks``, optionally cut as ``playlist_tracks``."""
+        path = f"/media/playlists/by-id/{_segment(playlist_id)}/tracks{_page(limit, offset)}"
+        return [MediaTrack.from_dict(item) for item in await self._objects("GET", path)]
 
     async def playlist_track(self, index: int, track: int) -> MediaTrack:
         """Read ``GET /media/playlists/{index}/tracks/{track}``."""
@@ -573,3 +624,15 @@ def _detail(content: bytes) -> str | None:
 def _segment(value: str) -> str:
     """A path segment: slashes and spaces in a speaker name or track id must not escape it."""
     return quote(value, safe="")
+
+
+def _page(limit: int | None, offset: int | None) -> str:
+    """The query string of a cut track list, empty without ``limit`` and ``offset``."""
+    if (limit is not None and limit < 0) or (offset is not None and offset < 0):
+        raise ValueError("limit and offset must not be negative")
+    query = [
+        f"{key}={value}"
+        for key, value in (("limit", limit), ("offset", offset))
+        if value is not None
+    ]
+    return f"?{'&'.join(query)}" if query else ""
