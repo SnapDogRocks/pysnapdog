@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/SnapDogRocks/pysnapdog/compare/v0.1.0...v0.2.0) (2026-11-02)
+
+
+### Features
+
+* **client:** address playlists by playlist_id and index ([#8](https://github.com/SnapDogRocks/pysnapdog/issues/8)) ([664cd10](https://github.com/SnapDogRocks/pysnapdog/commit/664cd10fd76de7b73d6f0d0da3a1da3ffee0b96d))
+
 ## 0.1.0 (2026-11-01)
 
 
