@@ -18,6 +18,7 @@ from pysnapdog import (
     CLOSE_GOING_AWAY,
     CLOSE_TOO_SLOW,
     Event,
+    PlaylistsChanged,
     SnapDogAuthError,
     SnapDogClient,
     SnapDogConnectionError,
@@ -175,6 +176,20 @@ async def test_events_that_arrive_while_the_state_is_read_are_delivered_after_it
     assert listener.connected
     await listener.stop()
     assert not listener.connected
+
+
+async def test_a_playlists_changed_event_reaches_the_callback(
+    session: aiohttp.ClientSession, ws_server: tuple[WsServer, TestServer]
+) -> None:
+    state, server = ws_server
+    state.script.append(sends({"type": "playlists_changed", "total": 4}))
+    probe = Probe()
+    listener = make(session, server, probe)
+
+    listener.start()
+    await probe.until(lambda: len(probe.events) == 1)
+    assert probe.events == [PlaylistsChanged(total=4)]
+    await listener.stop()
 
 
 async def test_the_key_goes_in_the_upgrade_request_header(

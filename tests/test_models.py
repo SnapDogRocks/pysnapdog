@@ -55,10 +55,21 @@ def sample(name: str) -> dict[str, Any]:
     return example({"$ref": f"#/components/schemas/{name}"})  # type: ignore[no-any-return]
 
 
+# The server still lists these as required. The library accepts payloads of older servers
+# that lack them, so each has a test of its own below.
+TOLERATED = {
+    ("PlaylistInfo", "id"),
+    ("PlaylistInfo", "index"),
+    ("PlaylistInfo", "playlist_id"),
+    ("PlaylistDetails", "id"),
+    ("PlaylistDetails", "index"),
+    ("PlaylistDetails", "playlist_id"),
+}
 REQUIRED = [
     (name, field)
     for name in MODELS
     for field in OPENAPI["components"]["schemas"][name].get("required", [])
+    if (name, field) not in TOLERATED
 ]
 OPTIONAL = [
     (name, field)
@@ -86,6 +97,45 @@ def test_an_optional_field_may_be_absent_or_null(name: str, field: str) -> None:
     null = {**sample(name), field: None}
     for data in (absent, null):
         MODELS[name].from_dict(data)
+
+
+@pytest.mark.parametrize("name", ["PlaylistInfo", "PlaylistDetails"])
+def test_a_playlist_parses_without_the_deprecated_id(name: str) -> None:
+    data = {k: v for k, v in sample(name).items() if k != "id"}
+    data["index"] = 4
+    data["playlist_id"] = "subsonic:42"
+    model = MODELS[name].from_dict(data)
+    assert (model.index, model.playlist_id) == (4, "subsonic:42")
+
+
+@pytest.mark.parametrize("name", ["PlaylistInfo", "PlaylistDetails"])
+def test_index_wins_over_id_and_id_reads_as_index(name: str) -> None:
+    model = MODELS[name].from_dict({**sample(name), "id": 9, "index": 4})
+    assert model.index == 4
+    assert model.id == 4
+
+
+@pytest.mark.parametrize("name", ["PlaylistInfo", "PlaylistDetails"])
+def test_a_playlist_of_an_older_server_falls_back_to_id(name: str) -> None:
+    data = {k: v for k, v in sample(name).items() if k not in ("index", "playlist_id")}
+    data["id"] = 7
+    model = MODELS[name].from_dict(data)
+    assert (model.index, model.playlist_id) == (7, None)
+
+
+@pytest.mark.parametrize("name", ["PlaylistInfo", "PlaylistDetails"])
+def test_a_playlist_with_neither_index_nor_id_is_refused(name: str) -> None:
+    data = {k: v for k, v in sample(name).items() if k not in ("index", "id")}
+    with pytest.raises(SnapDogResponseError, match="index"):
+        MODELS[name].from_dict(data)
+
+
+def test_the_zone_models_carry_the_playlist_id() -> None:
+    track = TrackMetadata.from_dict({**sample("ZoneTrackMetadata"), "playlist_id": "snapdog:radio"})
+    assert track.playlist_id == "snapdog:radio"
+    info = ZonePlaylist.from_dict({**sample("ZonePlaylistInfo"), "playlist_id": "subsonic:1"})
+    assert info.playlist_id == "subsonic:1"
+    assert ZonePlaylist.from_dict({}).playlist_id is None
 
 
 def test_a_bool_is_not_an_int() -> None:

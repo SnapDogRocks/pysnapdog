@@ -148,6 +148,17 @@ CASES: list[Case] = [
     ),
     # Zones: what to play
     case(op("PUT", f"{Z}/playlist"), lambda c: c.set_zone_playlist(2, 3), "/zones/2/playlist", 3),
+    case(
+        op("GET", f"{Z}/playlist/by-id"),
+        lambda c: c.zone_playlist_id(2),
+        "/zones/2/playlist/by-id",
+    ),
+    case(
+        op("PUT", f"{Z}/playlist/by-id"),
+        lambda c: c.set_zone_playlist_id(2, "subsonic:42"),
+        "/zones/2/playlist/by-id",
+        "subsonic:42",
+    ),
     case(op("POST", f"{Z}/next/playlist"), lambda c: c.next_playlist(2), "/zones/2/next/playlist"),
     case(
         op("POST", f"{Z}/previous/playlist"),
@@ -159,7 +170,13 @@ CASES: list[Case] = [
         op("POST", f"{Z}/play/playlist"),
         lambda c: c.play_playlist(2, 3, 4),
         "/zones/2/play/playlist",
-        {"id": 3, "track": 4},
+        {"index": 3, "track": 4},
+    ),
+    case(
+        op("POST", f"{Z}/play/playlist/by-id"),
+        lambda c: c.play_playlist_id(2, "subsonic:42", 4),
+        "/zones/2/play/playlist/by-id",
+        {"playlist_id": "subsonic:42", "track": 4},
     ),
     case(
         op("POST", f"{Z}/play/playlist/{{playlist_index}}/track"),
@@ -261,6 +278,16 @@ CASES: list[Case] = [
         op("GET", "/media/playlists/{playlist_index}"),
         lambda c: c.playlist(1),
         "/media/playlists/1",
+    ),
+    case(
+        op("GET", "/media/playlists/by-id/{playlist_id}"),
+        lambda c: c.playlist_by_id("subsonic:a/b c"),
+        "/media/playlists/by-id/subsonic:a%2Fb%20c",
+    ),
+    case(
+        op("GET", "/media/playlists/by-id/{playlist_id}/tracks"),
+        lambda c: c.playlist_tracks_by_id("snapdog:radio"),
+        "/media/playlists/by-id/snapdog:radio/tracks",
     ),
     case(
         op("GET", "/media/playlists/{playlist_index}/tracks"),

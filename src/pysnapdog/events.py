@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Self
 
 from .exceptions import SnapDogResponseError
-from .models import JSON, EqConfig, RepeatMode, _enum, _optional, _require
+from .models import JSON, EqConfig, RepeatMode, _enum, _optional, _playlist_index, _require
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,13 +45,20 @@ class ZoneChanged:
     content_type: str | None
     track_index: int | None
     track_count: int | None
-    playlist: int | None
+    playlist_index: int | None
+    playlist_id: str | None
     playlist_name: str | None
     playlist_total: int | None
 
     @classmethod
     def from_dict(cls, data: JSON) -> Self:
-        """Build the event from a decoded JSON object."""
+        """Build the event from a decoded JSON object.
+
+        ``playlist_id`` identifies the active playlist and is the value to remember and compare.
+        ``playlist_index`` moves when the list changes. Against an older server that sends no
+        ``playlist_index`` the event falls back to the deprecated ``playlist`` field for it, and
+        ``playlist_id`` is ``None``.
+        """
         what = "zone_changed"
         return cls(
             zone=_require(data, "zone", int, what),
@@ -81,10 +88,16 @@ class ZoneChanged:
             content_type=_optional(data, "content_type", str, what),
             track_index=_optional(data, "track_index", int, what),
             track_count=_optional(data, "track_count", int, what),
-            playlist=_optional(data, "playlist", int, what),
+            playlist_index=_playlist_index(data, "playlist_index", "playlist", what),
+            playlist_id=_optional(data, "playlist_id", str, what),
             playlist_name=_optional(data, "playlist_name", str, what),
             playlist_total=_optional(data, "playlist_total", int, what),
         )
+
+    @property
+    def playlist(self) -> int | None:
+        """``playlist_index`` under the name of the deprecated ``playlist`` field. Do not use."""
+        return self.playlist_index
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,6 +223,22 @@ class PlaybackError:
 
 
 @dataclass(frozen=True, slots=True)
+class PlaylistsChanged:
+    """The list of playlists, an index or a name may have changed.
+
+    Read ``SnapDogClient.playlists()`` again, and do so after a reconnect as well. ``total`` is the
+    number of playlists now, the radio list included.
+    """
+
+    total: int
+
+    @classmethod
+    def from_dict(cls, data: JSON) -> Self:
+        """Build the event from a decoded JSON object."""
+        return cls(total=_require(data, "total", int, "playlists_changed"))
+
+
+@dataclass(frozen=True, slots=True)
 class UnknownEvent:
     """An event type this version of the library does not know. Newer servers may send them."""
 
@@ -225,6 +254,7 @@ type Event = (
     | ZoneEqChanged
     | ZonePresenceChanged
     | PlaybackError
+    | PlaylistsChanged
     | UnknownEvent
 )
 
@@ -236,6 +266,7 @@ _PARSERS: dict[str, Any] = {
     "zone_eq_changed": ZoneEqChanged.from_dict,
     "zone_presence_changed": ZonePresenceChanged.from_dict,
     "playback_error": PlaybackError.from_dict,
+    "playlists_changed": PlaylistsChanged.from_dict,
 }
 
 KNOWN_EVENT_TYPES = frozenset(_PARSERS)
