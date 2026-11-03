@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/SnapDogRocks/pysnapdog/compare/v0.2.0...v0.3.0) (2026-11-03)
+
+
+### Features
+
+* add search, album playback and playlist management ([#11](https://github.com/SnapDogRocks/pysnapdog/issues/11)) ([67eb1aa](https://github.com/SnapDogRocks/pysnapdog/commit/67eb1aaca204562aa35f3a3fc740b00a6c54a982))
+
 ## [0.2.0](https://github.com/SnapDogRocks/pysnapdog/compare/v0.1.0...v0.2.0) (2026-11-02)
 
 
