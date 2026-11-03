@@ -15,6 +15,7 @@ from pysnapdog import (
     EqConfig,
     FilterType,
     RepeatMode,
+    SearchKind,
     SnapDogClient,
     UpdateConfig,
 )
@@ -308,6 +309,48 @@ CASES: list[Case] = [
         op("GET", "/media/playlists/{playlist_index}/tracks/{track_index}/cover"),
         lambda c: c.track_cover(1, 2),
         "/media/playlists/1/tracks/2/cover",
+    ),
+    case(
+        op("GET", "/media/search"),
+        lambda c: c.search(
+            "elton john", kinds=[SearchKind.ALBUM, SearchKind.RADIO], limit=5, offset=10
+        ),
+        "/media/search?q=elton%20john&kind=album,radio&limit=5&offset=10",
+    ),
+    case(
+        op("GET", "/media/cover/{cover_id}"),
+        lambda c: c.media_cover("al-1/b c"),
+        "/media/cover/al-1%2Fb%20c",
+    ),
+    case(
+        op("POST", f"{Z}/play/subsonic/album/{{album_id}}"),
+        lambda c: c.play_subsonic_album(2, "al-1/b c"),
+        "/zones/2/play/subsonic/album/al-1%2Fb%20c",
+    ),
+    case(
+        op("POST", "/media/playlists"),
+        lambda c: c.create_playlist("Evening", ["t1", "t2"]),
+        "/media/playlists",
+        {"name": "Evening", "track_ids": ["t1", "t2"]},
+    ),
+    case(
+        op("PATCH", "/media/playlists/by-id/{playlist_id}"),
+        lambda c: c.update_playlist(
+            "subsonic:a/b", name="Late", add_track_ids=["t3"], remove_positions=[0, 2]
+        ),
+        "/media/playlists/by-id/subsonic:a%2Fb",
+        {"name": "Late", "add_track_ids": ["t3"], "remove_positions": [0, 2]},
+    ),
+    case(
+        op("PUT", "/media/playlists/by-id/{playlist_id}/tracks"),
+        lambda c: c.replace_playlist_tracks("subsonic:a", ["t2", "t1"]),
+        "/media/playlists/by-id/subsonic:a/tracks",
+        {"track_ids": ["t2", "t1"]},
+    ),
+    case(
+        op("DELETE", "/media/playlists/by-id/{playlist_id}"),
+        lambda c: c.delete_playlist("subsonic:a"),
+        "/media/playlists/by-id/subsonic:a",
     ),
 ]
 

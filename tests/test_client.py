@@ -17,14 +17,17 @@ from pysnapdog import (
     FilterType,
     Image,
     RepeatMode,
+    SearchKind,
     SnapDogAuthError,
     SnapDogBusyError,
     SnapDogClient,
     SnapDogConnectionError,
     SnapDogError,
     SnapDogNotFoundError,
+    SnapDogReadOnlyError,
     SnapDogResponseError,
     SnapDogUnsupportedError,
+    SnapDogUpstreamError,
     UpdateStatus,
     VersionInfo,
     Zone,
@@ -192,6 +195,224 @@ async def test_an_unknown_playlist_id_is_not_found(
         await client(session, fake).playlist_by_id("subsonic:nope")
 
 
+SEARCH = ("GET", "/api/v1/media/search")
+PLAYLISTS = "/api/v1/media/playlists"
+PLAYLIST_ROW = {
+    "id": 4,
+    "index": 4,
+    "playlist_id": "subsonic:new",
+    "name": "Evening",
+    "song_count": 2,
+    "duration": 636,
+    "cover_art": None,
+}
+PLAYLIST_DETAILS = {"id": 4, "index": 4, "playlist_id": "subsonic:new", "name": "Late", "tracks": 3}
+
+
+async def test_a_search_returns_every_kind_with_its_own_identifier(
+    session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    json_override(
+        fake,
+        SEARCH,
+        {
+            "items": [
+                {
+                    "kind": "track",
+                    "title": "Daniel",
+                    "subtitle": "Elton",
+                    "duration": 235,
+                    "cover_art": "/api/v1/media/cover/al-1%2Fx",
+                    "track_id": "t1",
+                },
+                {"kind": "album", "title": "Greatest", "duration": 100, "album_id": "al-1"},
+                {
+                    "kind": "playlist",
+                    "title": "Mix",
+                    "duration": 5,
+                    "playlist_id": "subsonic:p",
+                    "index": 3,
+                },
+                {
+                    "kind": "radio",
+                    "title": "DLF",
+                    "duration": 0,
+                    "playlist_id": "snapdog:radio",
+                    "index": 0,
+                    "track": 2,
+                },
+                {"kind": "artist", "title": "from a newer server", "duration": 0},
+            ],
+            "next_offset": 20,
+        },
+    )
+    result = await client(session, fake).search("el")
+
+    assert [i.kind for i in result.items] == list(SearchKind)
+    track, album, playlist, radio = result.items
+    assert (track.track_id, track.subtitle, track.cover_id) == ("t1", "Elton", "al-1/x")
+    assert (album.album_id, album.subtitle, album.cover_id) == ("al-1", None, None)
+    assert (playlist.playlist_id, playlist.index) == ("subsonic:p", 3)
+    assert (radio.playlist_id, radio.index, radio.track) == ("snapdog:radio", 0, 2)
+    assert result.next_offset == 20
+
+
+async def test_the_last_page_of_a_search_has_no_next_offset(
+    session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    json_override(fake, SEARCH, {"items": [], "next_offset": None})
+    result = await client(session, fake).search("el")
+    assert (result.items, result.next_offset) == ((), None)
+    assert fake.last.path == "/api/v1/media/search?q=el"
+
+
+async def test_a_search_without_items_is_a_response_error(
+    session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    json_override(fake, SEARCH, {"next_offset": None})
+    with pytest.raises(SnapDogResponseError, match="items"):
+        await client(session, fake).search("el")
+
+
+async def test_a_search_sends_what_must_be_encoded_encoded(
+    session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    await client(session, fake).search("a&b=c/d é", kinds=[SearchKind.TRACK])
+    assert fake.last.path == "/api/v1/media/search?q=a%26b%3Dc/d%20%C3%A9&kind=track"
+
+
+@pytest.mark.parametrize(
+    "arguments", [{"limit": -1}, {"offset": -1}, {"kinds": ["artist"]}], ids=str
+)
+async def test_a_search_rejects_arguments_the_server_would_refuse(
+    arguments: dict[str, Any], session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    with pytest.raises(ValueError):  # noqa: PT011
+        await client(session, fake).search("el", **arguments)
+    assert not fake.calls
+
+
+async def test_a_too_short_query_is_the_servers_400(
+    session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    json_override(fake, SEARCH, {"error": "bad_request", "message": "q needs two"}, 400)
+    with pytest.raises(SnapDogResponseError, match="q needs two") as info:
+        await client(session, fake).search("a")
+    assert info.value.status == 400
+
+
+async def test_a_media_server_that_is_down_fails_the_search_with_502(
+    session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    json_override(fake, SEARCH, {"error": "bad_gateway", "message": "subsonic is down"}, 502)
+    with pytest.raises(SnapDogUpstreamError, match="subsonic is down"):
+        await client(session, fake).search("el")
+
+
+async def test_a_cover_comes_back_as_an_image(session: aiohttp.ClientSession, fake: Fake) -> None:
+    image = await client(session, fake).media_cover("al-1")
+    assert image == Image(b"\x89PNG-bytes", "image/png")
+
+
+async def test_an_unknown_cover_is_not_found(session: aiohttp.ClientSession, fake: Fake) -> None:
+    json_override(
+        fake, ("GET", "/api/v1/media/cover/{cover_id}"), {"message": "resource not found"}, 404
+    )
+    with pytest.raises(SnapDogNotFoundError):
+        await client(session, fake).media_cover("nope")
+
+
+async def test_a_created_playlist_is_returned_with_its_playlist_id(
+    session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    fake.overrides[("POST", PLAYLISTS)] = web.json_response(PLAYLIST_ROW, status=201)
+    playlist = await client(session, fake).create_playlist("Evening")
+    assert (playlist.playlist_id, playlist.name, playlist.song_count) == (
+        "subsonic:new",
+        "Evening",
+        2,
+    )
+    assert fake.last.body == {"name": "Evening", "track_ids": []}
+
+
+async def test_an_update_sends_only_what_was_given(
+    session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    json_override(fake, ("PATCH", PLAYLISTS + "/by-id/{playlist_id}"), PLAYLIST_DETAILS)
+    details = await client(session, fake).update_playlist("subsonic:new", remove_positions=[1])
+    assert (details.playlist_id, details.name, details.tracks) == ("subsonic:new", "Late", 3)
+    assert fake.last.body == {"remove_positions": [1]}
+
+
+async def test_an_update_without_a_change_is_refused_before_the_request(
+    session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    with pytest.raises(ValueError, match="positions to remove"):
+        await client(session, fake).update_playlist("subsonic:new")
+    assert not fake.calls
+
+
+async def test_replacing_tracks_returns_the_playlist(
+    session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    json_override(fake, ("PUT", PLAYLISTS + "/by-id/{playlist_id}/tracks"), PLAYLIST_DETAILS)
+    details = await client(session, fake).replace_playlist_tracks("subsonic:new", [])
+    assert details.tracks == 3
+    assert fake.last.body == {"track_ids": []}
+
+
+@pytest.mark.parametrize(
+    ("verb", "template", "call"),
+    [
+        ("POST", PLAYLISTS, lambda c: c.create_playlist("x")),
+        (
+            "PATCH",
+            PLAYLISTS + "/by-id/{playlist_id}",
+            lambda c: c.update_playlist("snapdog:radio", name="x"),
+        ),
+        (
+            "PUT",
+            PLAYLISTS + "/by-id/{playlist_id}/tracks",
+            lambda c: c.replace_playlist_tracks("snapdog:radio", []),
+        ),
+        (
+            "DELETE",
+            PLAYLISTS + "/by-id/{playlist_id}",
+            lambda c: c.delete_playlist("snapdog:radio"),
+        ),
+    ],
+    ids=["create", "update", "replace", "delete"],
+)
+async def test_a_write_the_server_forbids_is_a_read_only_error(
+    verb: str, template: str, call: Any, session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    json_override(fake, (verb, template), {"error": "read_only", "message": "writing is off"}, 403)
+    with pytest.raises(SnapDogReadOnlyError, match="writing is off") as info:
+        await call(client(session, fake))
+    assert info.value.status == 403
+
+
+async def test_a_refusal_of_the_media_server_is_an_upstream_error(
+    session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    json_override(
+        fake,
+        ("DELETE", PLAYLISTS + "/by-id/{playlist_id}"),
+        {"error": "bad_gateway", "message": "user is not authorized"},
+        502,
+    )
+    with pytest.raises(SnapDogUpstreamError, match="not authorized") as info:
+        await client(session, fake).delete_playlist("subsonic:x")
+    assert info.value.detail == "user is not authorized"
+
+
+async def test_deleting_a_playlist_returns_nothing(
+    session: aiohttp.ClientSession, fake: Fake
+) -> None:
+    await client(session, fake).delete_playlist("subsonic:x")
+    assert fake.last.method == "DELETE"
+
+
 # ── Errors ──────────────────────────────────────────────────────────────────
 
 
@@ -230,8 +451,10 @@ async def test_every_error_is_a_snapdog_error(session: aiohttp.ClientSession, fa
 @pytest.mark.parametrize(
     ("status", "error"),
     [
+        (403, SnapDogReadOnlyError),
         (404, SnapDogNotFoundError),
         (422, SnapDogUnsupportedError),
+        (502, SnapDogUpstreamError),
         (503, SnapDogBusyError),
         (400, SnapDogResponseError),
         (500, SnapDogResponseError),
