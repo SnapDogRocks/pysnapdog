@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Self
+from urllib.parse import unquote
 
 from .exceptions import SnapDogResponseError
 
@@ -74,6 +75,15 @@ class RepeatMode(StrEnum):
     OFF = "off"
     TRACK = "track"
     PLAYLIST = "playlist"
+
+
+class SearchKind(StrEnum):
+    """What ``GET /media/search`` looks for and what a result is."""
+
+    TRACK = "track"
+    ALBUM = "album"
+    PLAYLIST = "playlist"
+    RADIO = "radio"
 
 
 class FilterType(StrEnum):
@@ -417,6 +427,84 @@ class MediaTrack:
             album=_require(data, "album", str, what),
             duration=_require(data, "duration", int, what),
             cover_art=_optional(data, "cover_art", str, what),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SearchItem:
+    """``SearchItem``: one result of ``GET /api/v1/media/search``.
+
+    The identifier has one field per kind and the others are ``None``:
+
+    - track: ``track_id``, played with ``play_subsonic_track``
+    - album: ``album_id``, played with ``play_subsonic_album``
+    - playlist: ``playlist_id`` and ``index``, played with ``play_playlist_id``
+    - radio: ``playlist_id`` (``snapdog:radio``) and ``track``, the position of the station
+
+    ``cover_art`` is the path of a cover, and ``cover_id`` is the id for ``media_cover``.
+    """
+
+    kind: SearchKind
+    title: str
+    subtitle: str | None
+    duration: int
+    cover_art: str | None
+    track_id: str | None
+    album_id: str | None
+    playlist_id: str | None
+    index: int | None
+    track: int | None
+
+    @classmethod
+    def from_dict(cls, data: JSON) -> Self:
+        """Build the model from a decoded JSON object."""
+        what = "SearchItem"
+        return cls(
+            kind=_enum(SearchKind, data, "kind", what),
+            title=_require(data, "title", str, what),
+            subtitle=_optional(data, "subtitle", str, what),
+            duration=_require(data, "duration", int, what),
+            cover_art=_optional(data, "cover_art", str, what),
+            track_id=_optional(data, "track_id", str, what),
+            album_id=_optional(data, "album_id", str, what),
+            playlist_id=_optional(data, "playlist_id", str, what),
+            index=_optional(data, "index", int, what),
+            track=_optional(data, "track", int, what),
+        )
+
+    @property
+    def cover_id(self) -> str | None:
+        """The id in ``cover_art`` (its last path segment), for ``SnapDogClient.media_cover``."""
+        if self.cover_art is None:
+            return None
+        return unquote(self.cover_art.rsplit("/", 1)[-1])
+
+
+@dataclass(frozen=True, slots=True)
+class SearchResult:
+    """``SearchResponse``: a page of search results.
+
+    ``limit`` and ``offset`` apply to each kind, so a page holds up to ``limit`` results of every
+    kind asked for. ``next_offset`` is the ``offset`` of the next page, ``None`` when no kind filled
+    its page. A result of a kind this library does not know, from a newer server, is left out
+    instead of failing the whole page.
+    """
+
+    items: tuple[SearchItem, ...]
+    next_offset: int | None
+
+    @classmethod
+    def from_dict(cls, data: JSON) -> Self:
+        """Build the model from a decoded JSON object."""
+        what = "SearchResponse"
+        items = _require(data, "items", list, what)
+        return cls(
+            items=tuple(
+                SearchItem.from_dict(row)
+                for row in (_object(item, what) for item in items)
+                if row.get("kind") in {kind.value for kind in SearchKind}
+            ),
+            next_offset=_optional(data, "next_offset", int, what),
         )
 
 

@@ -94,6 +94,31 @@ when playlists or radios are added or removed. Store and compare the `playlist_i
 `client.playlists()` on the `PlaylistsChanged` event and after a reconnect. Against a server that is too old
 to send `playlist_id`, it is `None` and the models take `index` from the deprecated `id` field.
 
+### Search and manage playlists
+
+Search needs a Subsonic server behind SnapDog. `limit` and `offset` apply to each kind, and every result
+has the identifier of its own kind. Writing playlists needs `[subsonic].playlist_write = true` on the
+server, otherwise the calls raise `SnapDogReadOnlyError`. Address a playlist by its `playlist_id`.
+
+```python
+from pysnapdog import SearchKind
+
+result = await client.search("elton", kinds=[SearchKind.ALBUM, SearchKind.TRACK], limit=10)
+for item in result.items:
+    print(item.kind, item.title, item.subtitle)
+await client.play_subsonic_album(1, result.items[0].album_id)  # an album plays as its own queue
+cover = await client.media_cover(result.items[0].cover_id)
+
+playlist = await client.create_playlist("Evening", ["track-id-1", "track-id-2"])
+await client.update_playlist(playlist.playlist_id, name="Late", add_track_ids=["track-id-3"])
+await client.replace_playlist_tracks(playlist.playlist_id, ["track-id-3", "track-id-1"])
+await client.delete_playlist(playlist.playlist_id)
+```
+
+The server refuses `snapdog:radio` with the same `SnapDogReadOnlyError`, because that list lives in its
+configuration file. When the Subsonic server itself says no, for example for a user without the right to
+edit, the error is `SnapDogUpstreamError` with its message in `detail`.
+
 ### Live updates
 
 The server sends no initial state. `SnapDogListener` opens the socket first, lets you read the state
@@ -133,7 +158,7 @@ from pysnapdog import (
     SnapDogConnectionError,
     SnapDogError,
     SnapDogUnsupportedError,
-)
+)  # also SnapDogReadOnlyError (403) and SnapDogUpstreamError (502), see above
 
 try:
     eq = await client.client_eq(3)
@@ -158,11 +183,12 @@ except SnapDogError:
 | Zones: playlists, play track, playlist, Subsonic track, URL, cover | ✅ |
 | Clients: volume, mute, latency, zone, name | ✅ |
 | Equalizer for zones and clients, presets, speaker correction | ✅ |
-| Media: playlists, tracks, covers | ✅ |
+| Media: playlists, tracks, covers, search, album playback | ✅ |
+| Media: create, rename, fill, reorder and delete Subsonic playlists | ✅ |
 | KNX programming mode, product info, `.knxprod` download | ✅ |
 | WebSocket: seven event types, reconnect, resync | ✅ |
 
-The server has 100 REST operations. Every one is either a library call that a test exercises, or on a
+The server has 112 REST operations. Every one is either a library call that a test exercises, or on a
 short list of single-field reads that the `Zone`, `Client`, `TrackMetadata` and `ZonePlaylist` models
 already carry. `scripts/check_coverage.py` compares the library with the pinned `openapi.json` and
 `asyncapi.json` and fails when an operation or event is neither covered nor excluded with a reason.

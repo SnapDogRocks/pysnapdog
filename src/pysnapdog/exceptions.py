@@ -36,6 +36,22 @@ class SnapDogUnsupportedError(SnapDogResponseError):
     """The server answered 422: the call does not apply, for example EQ on a non-SnapDog client."""
 
 
+class SnapDogReadOnlyError(SnapDogResponseError):
+    """The server answered 403: it refuses to change this.
+
+    Playlist writes are off unless the operator sets ``[subsonic].playlist_write`` to ``true``,
+    and the radio list (``snapdog:radio``) is configured in the server's file and never writable.
+    """
+
+
+class SnapDogUpstreamError(SnapDogResponseError):
+    """The server answered 502: the media server behind it refused or did not answer.
+
+    ``detail`` carries the message of that server, for example a user without the right to edit
+    playlists.
+    """
+
+
 class SnapDogBusyError(SnapDogResponseError):
     """The server answered 503: a service it depends on is not configured or not reachable."""
 

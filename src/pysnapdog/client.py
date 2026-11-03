@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import aiohttp
 
@@ -14,8 +15,10 @@ from .exceptions import (
     SnapDogBusyError,
     SnapDogConnectionError,
     SnapDogNotFoundError,
+    SnapDogReadOnlyError,
     SnapDogResponseError,
     SnapDogUnsupportedError,
+    SnapDogUpstreamError,
 )
 from .models import (
     JSON,
@@ -30,6 +33,8 @@ from .models import (
     PlaylistDetails,
     ProductInfo,
     RepeatMode,
+    SearchKind,
+    SearchResult,
     SystemStatus,
     TrackMetadata,
     UpdateConfig,
@@ -44,8 +49,10 @@ DEFAULT_TIMEOUT = 10.0
 
 _NO_BODY: Any = object()
 _ERRORS: dict[int, type[SnapDogResponseError]] = {
+    403: SnapDogReadOnlyError,
     404: SnapDogNotFoundError,
     422: SnapDogUnsupportedError,
+    502: SnapDogUpstreamError,
     503: SnapDogBusyError,
 }
 
@@ -334,6 +341,16 @@ class SnapDogClient:
         """Play one track of one playlist."""
         await self._command("POST", f"/zones/{index}/play/playlist/{playlist}/track", json=track)
 
+    async def play_subsonic_album(self, index: int, album_id: str) -> None:
+        """Queue the tracks of a Subsonic album and play it.
+
+        ``POST /zones/{index}/play/subsonic/album/{album_id}``.
+
+        An album is not part of the playlists list: the zone then names it in ``playlist_name``
+        and has no ``playlist_index`` and no ``playlist_id``.
+        """
+        await self._command("POST", f"/zones/{index}/play/subsonic/album/{_segment(album_id)}")
+
     async def play_subsonic_track(self, index: int, track_id: str) -> None:
         """Play a Subsonic track by its id."""
         await self._command("POST", f"/zones/{index}/play/subsonic/{_segment(track_id)}")
@@ -493,6 +510,100 @@ class SnapDogClient:
     async def track_cover(self, index: int, track: int) -> Image:
         """Download the cover of a track."""
         return await self._download(f"/media/playlists/{index}/tracks/{track}/cover")
+
+    async def media_cover(self, cover_id: str) -> Image:
+        """Download ``GET /media/cover/{cover_id}``: the cover of a search result.
+
+        ``SearchItem.cover_id`` is the id. ``SnapDogNotFoundError`` when the media server has none,
+        ``SnapDogBusyError`` when no media server is configured.
+        """
+        return await self._download(f"/media/cover/{_segment(cover_id)}")
+
+    # ── Media: search ───────────────────────────────────────────────────────
+
+    async def search(
+        self,
+        query: str,
+        *,
+        kinds: Iterable[SearchKind] | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> SearchResult:
+        """Search tracks, albums, playlists and radio stations (``GET /media/search``).
+
+        ``query`` needs at least two characters, the server answers 400 otherwise. Without ``kinds``
+        every kind is searched. ``limit`` (default 20, at most 100) and ``offset`` apply to each
+        kind, and ``SearchResult.next_offset`` is the ``offset`` of the next page. A media server
+        that cannot be reached raises ``SnapDogUpstreamError``.
+        """
+        if (limit is not None and limit < 0) or (offset is not None and offset < 0):
+            raise ValueError("limit and offset must not be negative")
+        params: list[tuple[str, str | int]] = [("q", query)]
+        if kinds is not None:
+            params.append(("kind", ",".join(SearchKind(kind).value for kind in kinds)))
+        params.extend(
+            (key, value)
+            for key, value in (("limit", limit), ("offset", offset))
+            if value is not None
+        )
+        body = await self._object("GET", f"/media/search?{urlencode(params, quote_via=quote)}")
+        return SearchResult.from_dict(body)
+
+    # ── Media: manage playlists ─────────────────────────────────────────────
+    #
+    # The writes need ``[subsonic].playlist_write = true`` on the server and raise
+    # ``SnapDogReadOnlyError`` without it, and always for ``snapdog:radio``. A refusal of the media
+    # server (a user without the right to edit) raises ``SnapDogUpstreamError``. Address a playlist
+    # by its ``playlist_id`` (``subsonic:<id>``), never by its index. A change is followed by the
+    # ``PlaylistsChanged`` event.
+
+    async def create_playlist(self, name: str, track_ids: Iterable[str] = ()) -> Playlist:
+        """Create a playlist, with Subsonic track ids to start with if given.
+
+        ``POST /media/playlists``.
+        """
+        body: JSON = {"name": name, "track_ids": list(track_ids)}
+        return Playlist.from_dict(await self._object("POST", "/media/playlists", json=body))
+
+    async def update_playlist(
+        self,
+        playlist_id: str,
+        *,
+        name: str | None = None,
+        add_track_ids: Iterable[str] | None = None,
+        remove_positions: Iterable[int] | None = None,
+    ) -> PlaylistDetails:
+        """Rename, append tracks and remove tracks (``PATCH /media/playlists/by-id/{playlist_id}``).
+
+        ``add_track_ids`` are appended at the end. ``remove_positions`` are 0-based positions in the
+        playlist as it is now. At least one of the three is required.
+        """
+        body: JSON = {}
+        if name is not None:
+            body["name"] = name
+        if add_track_ids is not None:
+            body["add_track_ids"] = list(add_track_ids)
+        if remove_positions is not None:
+            body["remove_positions"] = list(remove_positions)
+        if not body:
+            raise ValueError("give a name, tracks to add or positions to remove")
+        path = f"/media/playlists/by-id/{_segment(playlist_id)}"
+        return PlaylistDetails.from_dict(await self._object("PATCH", path, json=body))
+
+    async def replace_playlist_tracks(
+        self, playlist_id: str, track_ids: Iterable[str]
+    ) -> PlaylistDetails:
+        """Set the complete content and order of a playlist.
+
+        ``PUT /media/playlists/by-id/{playlist_id}/tracks``.
+        """
+        path = f"/media/playlists/by-id/{_segment(playlist_id)}/tracks"
+        body: JSON = {"track_ids": list(track_ids)}
+        return PlaylistDetails.from_dict(await self._object("PUT", path, json=body))
+
+    async def delete_playlist(self, playlist_id: str) -> None:
+        """Delete a playlist (``DELETE /media/playlists/by-id/{playlist_id}``)."""
+        await self._request("DELETE", f"/media/playlists/by-id/{_segment(playlist_id)}")
 
     # ── Transport ───────────────────────────────────────────────────────────
 
