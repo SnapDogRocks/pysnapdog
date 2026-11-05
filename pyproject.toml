@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pysnapdog"
-version = "0.2.0"  # managed by release-please
+version = "0.3.0"  # managed by release-please
 description = "Async Python client for the SnapDog multi-room audio server (REST and WebSocket)"
 readme = "README.md"
 license = "Apache-2.0"
