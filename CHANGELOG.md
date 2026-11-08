@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/SnapDogRocks/pysnapdog/compare/v0.3.0...v0.3.1) (2026-11-08)
+
+
+### Documentation
+
+* say that a relative volume lags the last change ([#13](https://github.com/SnapDogRocks/pysnapdog/issues/13)) ([6b42c1f](https://github.com/SnapDogRocks/pysnapdog/commit/6b42c1f475d9bba706be0f98121f13d6682e8946))
+
 ## [0.3.0](https://github.com/SnapDogRocks/pysnapdog/compare/v0.2.0...v0.3.0) (2026-11-03)
 
 
