@@ -261,7 +261,9 @@ class SnapDogClient:
     async def set_zone_volume(self, index: int, volume: int | str) -> int:
         """Set the volume: an absolute ``0..100`` or a relative ``"+5"`` / ``"-3"``.
 
-        Returns the volume the server settled on.
+        Returns the volume the server settled on. A relative value is added to the value the
+        server last knew, which lags a moment behind a change made just before: send absolute
+        values when you track the volume yourself.
         """
         return await self._int("PUT", f"/zones/{index}/volume", json=volume)
 
@@ -410,7 +412,11 @@ class SnapDogClient:
         return await self._int("GET", f"/clients/{index}/latency")
 
     async def set_client_volume(self, index: int, volume: int | str) -> int:
-        """Set the volume: an absolute ``0..100`` or a relative ``"+5"`` / ``"-3"``."""
+        """Set the volume: an absolute ``0..100`` or a relative ``"+5"`` / ``"-3"``.
+
+        A relative value is added to the value the server last knew, which lags a moment behind
+        a change made just before: send absolute values when you track the volume yourself.
+        """
         return await self._int("PUT", f"/clients/{index}/volume", json=volume)
 
     async def set_client_mute(self, index: int, muted: bool) -> bool:  # noqa: FBT001
