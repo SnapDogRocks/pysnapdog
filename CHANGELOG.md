@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/SnapDogRocks/pysnapdog/compare/v0.3.1...v0.4.0) (2026-11-12)
+
+
+### Features
+
+* add the client_eq_changed and client_speaker_changed events ([d1e4974](https://github.com/SnapDogRocks/pysnapdog/commit/d1e4974e0c66a1b8c4a1218725a36e98ea5e2be5))
+* read latency_ms and name of client_state_changed and sample_rate of zone_changed ([d1e4974](https://github.com/SnapDogRocks/pysnapdog/commit/d1e4974e0c66a1b8c4a1218725a36e98ea5e2be5))
+
 ## [0.3.1](https://github.com/SnapDogRocks/pysnapdog/compare/v0.3.0...v0.3.1) (2026-11-08)
 
 
