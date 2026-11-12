@@ -49,6 +49,9 @@ class ZoneChanged:
     playlist_id: str | None
     playlist_name: str | None
     playlist_total: int | None
+    sample_rate: int | None = None
+    """The sample rate of the track in Hz, ``None`` when the track has none or the server does
+    not send it."""
 
     @classmethod
     def from_dict(cls, data: JSON) -> Self:
@@ -85,6 +88,7 @@ class ZoneChanged:
             disc_number=_optional(data, "disc_number", int, what),
             cover_url=_optional(data, "cover_url", str, what),
             bitrate_kbps=_optional(data, "bitrate_kbps", int, what),
+            sample_rate=_optional(data, "sample_rate", int, what),
             content_type=_optional(data, "content_type", str, what),
             track_index=_optional(data, "track_index", int, what),
             track_count=_optional(data, "track_count", int, what),
@@ -152,6 +156,8 @@ class ClientStateChanged:
     is_snapdog: bool
     latency_ms: int | None = None
     """The latency correction in milliseconds, ``None`` from a server that does not send it."""
+    name: str | None = None
+    """The display name of the client, ``None`` from a server that does not send it."""
 
     @classmethod
     def from_dict(cls, data: JSON) -> Self:
@@ -165,6 +171,7 @@ class ClientStateChanged:
             zone=_require(data, "zone", int, what),
             is_snapdog=_require(data, "is_snapdog", bool, what),
             latency_ms=_optional(data, "latency_ms", int, what),
+            name=_optional(data, "name", str, what),
         )
 
 

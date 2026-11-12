@@ -138,3 +138,19 @@ def test_a_client_event_carries_the_latency_and_older_servers_omit_it() -> None:
     assert ClientStateChanged.from_dict(body).latency_ms == -150
     del body["latency_ms"]
     assert ClientStateChanged.from_dict(body).latency_ms is None
+
+
+def test_a_client_event_carries_the_name_and_older_servers_omit_it() -> None:
+    body = payload("client_state_changed")
+    body["name"] = "Pantry"
+    assert ClientStateChanged.from_dict(body).name == "Pantry"
+    del body["name"]
+    assert ClientStateChanged.from_dict(body).name is None
+
+
+def test_a_zone_event_carries_the_sample_rate_and_older_servers_omit_it() -> None:
+    body = payload("zone_changed")
+    body["sample_rate"] = 44_100
+    assert ZoneChanged.from_dict(body).sample_rate == 44_100
+    del body["sample_rate"]
+    assert ZoneChanged.from_dict(body).sample_rate is None
