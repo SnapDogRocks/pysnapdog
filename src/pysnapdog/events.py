@@ -49,6 +49,9 @@ class ZoneChanged:
     playlist_id: str | None
     playlist_name: str | None
     playlist_total: int | None
+    sample_rate: int | None = None
+    """The sample rate of the track in Hz, ``None`` when the track has none or the server does
+    not send it."""
 
     @classmethod
     def from_dict(cls, data: JSON) -> Self:
@@ -85,6 +88,7 @@ class ZoneChanged:
             disc_number=_optional(data, "disc_number", int, what),
             cover_url=_optional(data, "cover_url", str, what),
             bitrate_kbps=_optional(data, "bitrate_kbps", int, what),
+            sample_rate=_optional(data, "sample_rate", int, what),
             content_type=_optional(data, "content_type", str, what),
             track_index=_optional(data, "track_index", int, what),
             track_count=_optional(data, "track_count", int, what),
@@ -150,6 +154,10 @@ class ClientStateChanged:
     connected: bool
     zone: int
     is_snapdog: bool
+    latency_ms: int | None = None
+    """The latency correction in milliseconds, ``None`` from a server that does not send it."""
+    name: str | None = None
+    """The display name of the client, ``None`` from a server that does not send it."""
 
     @classmethod
     def from_dict(cls, data: JSON) -> Self:
@@ -162,6 +170,8 @@ class ClientStateChanged:
             connected=_require(data, "connected", bool, what),
             zone=_require(data, "zone", int, what),
             is_snapdog=_require(data, "is_snapdog", bool, what),
+            latency_ms=_optional(data, "latency_ms", int, what),
+            name=_optional(data, "name", str, what),
         )
 
 
@@ -178,6 +188,36 @@ class ZoneEqChanged:
         what = "zone_eq_changed"
         # The server flattens the EQ config into the event object.
         return cls(zone=_require(data, "zone", int, what), config=EqConfig.from_dict(data))
+
+
+@dataclass(frozen=True, slots=True)
+class ClientEqChanged:
+    """The equalizer of a client changed."""
+
+    client: int
+    config: EqConfig
+
+    @classmethod
+    def from_dict(cls, data: JSON) -> Self:
+        """Build the event from a decoded JSON object."""
+        what = "client_eq_changed"
+        # The server flattens the EQ config into the event object.
+        return cls(client=_require(data, "client", int, what), config=EqConfig.from_dict(data))
+
+
+@dataclass(frozen=True, slots=True)
+class ClientSpeakerChanged:
+    """The speaker correction of a client changed."""
+
+    client: int
+    config: EqConfig
+
+    @classmethod
+    def from_dict(cls, data: JSON) -> Self:
+        """Build the event from a decoded JSON object."""
+        what = "client_speaker_changed"
+        # The server flattens the EQ config into the event object.
+        return cls(client=_require(data, "client", int, what), config=EqConfig.from_dict(data))
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,6 +291,8 @@ type Event = (
     | ZoneVolumeChanged
     | ZoneProgress
     | ClientStateChanged
+    | ClientEqChanged
+    | ClientSpeakerChanged
     | ZoneEqChanged
     | ZonePresenceChanged
     | PlaybackError
@@ -263,6 +305,8 @@ _PARSERS: dict[str, Any] = {
     "zone_volume_changed": ZoneVolumeChanged.from_dict,
     "zone_progress": ZoneProgress.from_dict,
     "client_state_changed": ClientStateChanged.from_dict,
+    "client_eq_changed": ClientEqChanged.from_dict,
+    "client_speaker_changed": ClientSpeakerChanged.from_dict,
     "zone_eq_changed": ZoneEqChanged.from_dict,
     "zone_presence_changed": ZonePresenceChanged.from_dict,
     "playback_error": PlaybackError.from_dict,

@@ -9,6 +9,8 @@ import pytest
 
 from pysnapdog import (
     KNOWN_EVENT_TYPES,
+    ClientEqChanged,
+    ClientSpeakerChanged,
     ClientStateChanged,
     EqConfig,
     PlaybackError,
@@ -31,6 +33,8 @@ CLASSES = {
     "zone_volume_changed": ZoneVolumeChanged,
     "zone_progress": ZoneProgress,
     "client_state_changed": ClientStateChanged,
+    "client_eq_changed": ClientEqChanged,
+    "client_speaker_changed": ClientSpeakerChanged,
     "zone_eq_changed": ZoneEqChanged,
     "zone_presence_changed": ZonePresenceChanged,
     "playback_error": PlaybackError,
@@ -130,3 +134,38 @@ def test_an_unknown_type_is_kept_not_refused() -> None:
 def test_a_message_without_a_type_is_refused(data: Any) -> None:
     with pytest.raises(SnapDogResponseError, match="'type'"):
         parse_event(data)
+
+
+def test_a_client_event_carries_the_latency_and_older_servers_omit_it() -> None:
+    body = payload("client_state_changed")
+    body["latency_ms"] = -150
+    assert ClientStateChanged.from_dict(body).latency_ms == -150
+    del body["latency_ms"]
+    assert ClientStateChanged.from_dict(body).latency_ms is None
+
+
+def test_a_client_event_carries_the_name_and_older_servers_omit_it() -> None:
+    body = payload("client_state_changed")
+    body["name"] = "Pantry"
+    assert ClientStateChanged.from_dict(body).name == "Pantry"
+    del body["name"]
+    assert ClientStateChanged.from_dict(body).name is None
+
+
+def test_a_zone_event_carries_the_sample_rate_and_older_servers_omit_it() -> None:
+    body = payload("zone_changed")
+    body["sample_rate"] = 44_100
+    assert ZoneChanged.from_dict(body).sample_rate == 44_100
+    del body["sample_rate"]
+    assert ZoneChanged.from_dict(body).sample_rate is None
+
+
+@pytest.mark.parametrize("name", ["client_eq_changed", "client_speaker_changed"])
+def test_the_client_eq_events_name_the_client_and_flatten_the_config(name: str) -> None:
+    body = payload(name)
+    body["client"] = 3
+    event = parse_event(body)
+    assert isinstance(event, ClientEqChanged | ClientSpeakerChanged)
+    assert type(event) is CLASSES[name]
+    assert event.client == 3
+    assert isinstance(event.config, EqConfig)
