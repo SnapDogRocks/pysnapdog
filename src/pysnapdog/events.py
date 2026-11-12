@@ -150,6 +150,8 @@ class ClientStateChanged:
     connected: bool
     zone: int
     is_snapdog: bool
+    latency_ms: int | None = None
+    """The latency correction in milliseconds, ``None`` from a server that does not send it."""
 
     @classmethod
     def from_dict(cls, data: JSON) -> Self:
@@ -162,6 +164,7 @@ class ClientStateChanged:
             connected=_require(data, "connected", bool, what),
             zone=_require(data, "zone", int, what),
             is_snapdog=_require(data, "is_snapdog", bool, what),
+            latency_ms=_optional(data, "latency_ms", int, what),
         )
 
 

@@ -130,3 +130,11 @@ def test_an_unknown_type_is_kept_not_refused() -> None:
 def test_a_message_without_a_type_is_refused(data: Any) -> None:
     with pytest.raises(SnapDogResponseError, match="'type'"):
         parse_event(data)
+
+
+def test_a_client_event_carries_the_latency_and_older_servers_omit_it() -> None:
+    body = payload("client_state_changed")
+    body["latency_ms"] = -150
+    assert ClientStateChanged.from_dict(body).latency_ms == -150
+    del body["latency_ms"]
+    assert ClientStateChanged.from_dict(body).latency_ms is None
