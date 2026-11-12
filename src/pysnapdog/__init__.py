@@ -4,6 +4,8 @@
 from .client import DEFAULT_PORT, SnapDogClient
 from .events import (
     KNOWN_EVENT_TYPES,
+    ClientEqChanged,
+    ClientSpeakerChanged,
     ClientStateChanged,
     Event,
     PlaybackError,
@@ -61,6 +63,8 @@ __all__ = [
     "DEFAULT_PORT",
     "KNOWN_EVENT_TYPES",
     "Client",
+    "ClientEqChanged",
+    "ClientSpeakerChanged",
     "ClientStateChanged",
     "EqBand",
     "EqConfig",

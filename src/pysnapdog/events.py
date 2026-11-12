@@ -191,6 +191,36 @@ class ZoneEqChanged:
 
 
 @dataclass(frozen=True, slots=True)
+class ClientEqChanged:
+    """The equalizer of a client changed."""
+
+    client: int
+    config: EqConfig
+
+    @classmethod
+    def from_dict(cls, data: JSON) -> Self:
+        """Build the event from a decoded JSON object."""
+        what = "client_eq_changed"
+        # The server flattens the EQ config into the event object.
+        return cls(client=_require(data, "client", int, what), config=EqConfig.from_dict(data))
+
+
+@dataclass(frozen=True, slots=True)
+class ClientSpeakerChanged:
+    """The speaker correction of a client changed."""
+
+    client: int
+    config: EqConfig
+
+    @classmethod
+    def from_dict(cls, data: JSON) -> Self:
+        """Build the event from a decoded JSON object."""
+        what = "client_speaker_changed"
+        # The server flattens the EQ config into the event object.
+        return cls(client=_require(data, "client", int, what), config=EqConfig.from_dict(data))
+
+
+@dataclass(frozen=True, slots=True)
 class ZonePresenceChanged:
     """The presence state of a zone changed."""
 
@@ -261,6 +291,8 @@ type Event = (
     | ZoneVolumeChanged
     | ZoneProgress
     | ClientStateChanged
+    | ClientEqChanged
+    | ClientSpeakerChanged
     | ZoneEqChanged
     | ZonePresenceChanged
     | PlaybackError
@@ -273,6 +305,8 @@ _PARSERS: dict[str, Any] = {
     "zone_volume_changed": ZoneVolumeChanged.from_dict,
     "zone_progress": ZoneProgress.from_dict,
     "client_state_changed": ClientStateChanged.from_dict,
+    "client_eq_changed": ClientEqChanged.from_dict,
+    "client_speaker_changed": ClientSpeakerChanged.from_dict,
     "zone_eq_changed": ZoneEqChanged.from_dict,
     "zone_presence_changed": ZonePresenceChanged.from_dict,
     "playback_error": PlaybackError.from_dict,
