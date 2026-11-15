@@ -169,3 +169,11 @@ def test_the_client_eq_events_name_the_client_and_flatten_the_config(name: str) 
     assert type(event) is CLASSES[name]
     assert event.client == 3
     assert isinstance(event.config, EqConfig)
+
+
+def test_a_presence_event_carries_the_auto_off_delay_and_older_servers_omit_it() -> None:
+    body = payload("zone_presence_changed")
+    body["auto_off_delay"] = 120
+    assert ZonePresenceChanged.from_dict(body).auto_off_delay == 120
+    del body["auto_off_delay"]
+    assert ZonePresenceChanged.from_dict(body).auto_off_delay is None
