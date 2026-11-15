@@ -228,6 +228,8 @@ class ZonePresenceChanged:
     presence: bool
     enabled: bool
     timer_active: bool
+    auto_off_delay: int | None = None
+    """The auto-off delay in seconds, ``None`` from a server that does not send it."""
 
     @classmethod
     def from_dict(cls, data: JSON) -> Self:
@@ -238,6 +240,7 @@ class ZonePresenceChanged:
             presence=_require(data, "presence", bool, what),
             enabled=_require(data, "enabled", bool, what),
             timer_active=_require(data, "timer_active", bool, what),
+            auto_off_delay=_optional(data, "auto_off_delay", int, what),
         )
 
 
