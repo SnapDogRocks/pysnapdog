@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/SnapDogRocks/pysnapdog/compare/v0.4.0...v0.5.0) (2026-11-15)
+
+
+### Features
+
+* read auto_off_delay of zone_presence_changed ([#20](https://github.com/SnapDogRocks/pysnapdog/issues/20)) ([ecdcdf5](https://github.com/SnapDogRocks/pysnapdog/commit/ecdcdf50675171103f2940d4cdf51e20a021a29f))
+
 ## [0.4.0](https://github.com/SnapDogRocks/pysnapdog/compare/v0.3.1...v0.4.0) (2026-11-12)
 
 
